@@ -35,7 +35,6 @@ venv/
 node_modules/
 __pycache__/
 *.log
-frontend/
 adc.json
 application_default_credentials.json
 
