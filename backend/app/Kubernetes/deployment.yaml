@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gift-agent
+  labels:
+    app: gift-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gift-agent
+  template:
+    metadata:
+      labels:
+        app: gift-agent
+    spec:
+      serviceAccountName: gift-agent-ksa  # ✅ Workload Identity link
+      containers:
+        - name: backend
+          image: asia-south1-docker.pkg.dev/gift-list-agent/gift-agent-repo/gift-agent:v1
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PROJECT_ID
+              value: "gift-list-agent"
+            - name: REGION
+              value: "asia-south1"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20

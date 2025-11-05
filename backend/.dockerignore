@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.env
+.DS_Store
+.vscode/
+.idea/
+.git/
+node_modules/
+tests/
+build/
+dist/
+*.log
+frontend/
