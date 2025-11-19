@@ -1,64 +1,61 @@
-from vertexai import init
-from vertexai.generative_models import GenerativeModel
 import json
-from app.storage import Storage
-
-from vertexai import init
+import vertexai
 from vertexai.generative_models import GenerativeModel
-import json
 from app.storage import Storage
-
 
 class Agent:
     def __init__(self):
-        # ✅ Vertex AI in supported region
-        init(project="gift-list-agent", location="us-central1")
+        # Initialize Vertex AI
+        vertexai.init(
+            project="gift-list-agent",
+            location="us-central1"
+        )
 
-        # ✅ Correct model name
+        # Use Gemini 2.5 Pro Model
         self.model = GenerativeModel("gemini-2.5-pro")
 
-        # ✅ Your existing GCS bucket (region doesn't matter for storage)
+        # Storage bucket
         self.storage = Storage("gift-list-data")
 
-
-    async def handle(self, text, user_id):
-        """
-        Interpret user text via Gemini and perform a storage action.
-        """
+    def ai_parse(self, text: str):
         prompt = f"""
-        You are a structured AI assistant that manages a user's gift list.
-        The user said: "{text}"
+        You are a JSON-only parser for a Gift List Agent.
+        User input: "{text}"
 
-        Respond ONLY in JSON format like this:
-        {{
-            "action": "add" | "remove" | "show",
-            "item": "<gift item or empty string>",
-            "recipient": "<person name or empty string>"
-        }}
+        Return ONLY valid JSON with:
+        - action: "add" | "remove" | "show"
+        - item: string or null
+        - recipient: string or null
+
+        Examples:
+        "add watch for dad" → {{"action":"add","item":"watch","recipient":"dad"}}
+        "show list" → {{"action":"show"}}
         """
+
+        response = self.model.generate_content(prompt)
+        result = response.text.strip()
 
         try:
-            response = self.model.generate_content(prompt)
-            raw_text = response.text.strip()
+            return json.loads(result)
+        except:
+            # fallback wrapper if model returns text with backticks or explanation
+            cleaned = result.replace("```json", "").replace("```", "").strip()
+            return json.loads(cleaned)
 
-            # Clean JSON if Gemini adds extra words
-            json_str = raw_text[raw_text.find("{"): raw_text.rfind("}") + 1]
-            parsed = json.loads(json_str)
-        except Exception as e:
-            return {
-                "error": f"Failed to parse model response: {str(e)}",
-                "raw_response": raw_text if "raw_text" in locals() else None,
-            }
+    async def handle(self, text, user_id):
+        parsed = self.ai_parse(text)
 
-        action = parsed.get("action", "").lower().strip()
-        item = parsed.get("item", "").strip()
-        recipient = parsed.get("recipient", "").strip()
+        action = parsed.get("action")
+        item = parsed.get("item")
+        recipient = parsed.get("recipient")
 
         if action == "add":
             return self.storage.add_gift(user_id, item, recipient)
-        elif action == "remove":
+
+        if action == "remove":
             return self.storage.remove_gift(user_id, item)
-        elif action == "show":
+
+        if action == "show":
             return self.storage.get_list(user_id)
-        else:
-            return {"error": f"Unknown action: {action}", "parsed": parsed}
+
+        return {"error": "Unknown action"}

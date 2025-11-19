@@ -6,6 +6,7 @@ function App() {
   const [response, setResponse] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // FIX 1: Use correct localhost AND remove accidental 0.0 bug.
   const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
   const handleSubmit = async (e) => {
@@ -20,23 +21,27 @@ function App() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          // This header is okay for now
           "x-goog-authenticated-user-id": "accounts.google.com:testuser@gmail.com",
         },
         body: JSON.stringify({ text }),
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
 
       const data = await res.json();
 
-      if (Array.isArray(data.result)) {
-        setResponse(
-          data.result
-            .map((g, i) => `${i + 1}. ${g.item} 🎁 for ${g.recipient}`)
-            .join("\n")
-        );
+      // FIX 2: handle backend return format: { success: true, result: [...] }
+      const result = data.result;
+
+      if (Array.isArray(result)) {
+        setResponse(result.map((g, i) =>
+          `${i + 1}. ${g.item} 🎁 for ${g.recipient}`
+        ).join("\n"));
       } else {
-        setResponse(JSON.stringify(data.result, null, 2));
+        setResponse(JSON.stringify(result, null, 2));
       }
 
       setText("");
@@ -96,10 +101,6 @@ function App() {
           )}
         </AnimatePresence>
       </motion.div>
-
-      <p className="mt-6 text-sm text-gray-500">
-        
-      </p>
     </div>
   );
 }
