@@ -5,57 +5,52 @@ from app.storage import Storage
 
 class Agent:
     def __init__(self):
-        # Initialize Vertex AI
-        vertexai.init(
-            project="gift-list-agent",
-            location="us-central1"
-        )
-
-        # Use Gemini 2.5 Pro Model
-        self.model = GenerativeModel("gemini-2.5-pro")
-
-        # Storage bucket
+        vertexai.init(project="gift-list-agent", location="us-central1")
+        self.model = GenerativeModel("gemini-2.0-flash")   # FAST + CHEAP
         self.storage = Storage("gift-list-data")
 
     def ai_parse(self, text: str):
         prompt = f"""
-        You are a JSON-only parser for a Gift List Agent.
-        User input: "{text}"
+        You are a strict JSON parser.
 
-        Return ONLY valid JSON with:
-        - action: "add" | "remove" | "show"
-        - item: string or null
-        - recipient: string or null
+        Extract these fields:
+        - action: add | remove | show
+        - item: gift name or null
+        - person: person's name or null
 
-        Examples:
-        "add watch for dad" → {{"action":"add","item":"watch","recipient":"dad"}}
-        "show list" → {{"action":"show"}}
+        Always respond ONLY as JSON.
+
+        Example:
+        "add watch for Sumit" → {{"action":"add","item":"watch","person":"sumit"}}
+        "show list for amit" → {{"action":"show","person":"amit"}}
+        "remove bag from rahul" → {{"action":"remove","item":"bag","person":"rahul"}}
+
+        USER MESSAGE: "{text}"
         """
 
-        response = self.model.generate_content(prompt)
-        result = response.text.strip()
+        resp = self.model.generate_content(prompt)
+        out = resp.text.strip()
 
-        try:
-            return json.loads(result)
-        except:
-            # fallback wrapper if model returns text with backticks or explanation
-            cleaned = result.replace("```json", "").replace("```", "").strip()
-            return json.loads(cleaned)
+        out = out.replace("```json", "").replace("```", "").strip()
+        return json.loads(out)
 
-    async def handle(self, text, user_id):
+    async def handle(self, text, user):
         parsed = self.ai_parse(text)
 
         action = parsed.get("action")
+        person = parsed.get("person", user)
         item = parsed.get("item")
-        recipient = parsed.get("recipient")
 
         if action == "add":
-            return self.storage.add_gift(user_id, item, recipient)
+            return self.storage.add_item(person, item)
 
         if action == "remove":
-            return self.storage.remove_gift(user_id, item)
+            return self.storage.remove_item(person, item)
+
+        if action == "show" and person:
+            return self.storage.show_person(person)
 
         if action == "show":
-            return self.storage.get_list(user_id)
+            return self.storage.show_all()
 
-        return {"error": "Unknown action"}
+        return []

@@ -3,10 +3,10 @@ import { motion, AnimatePresence } from "framer-motion";
 
 function App() {
   const [text, setText] = useState("");
-  const [response, setResponse] = useState("");
+  const [response, setResponse] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // FIX 1: Use correct localhost AND remove accidental 0.0 bug.
   const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
   const handleSubmit = async (e) => {
@@ -14,39 +14,35 @@ function App() {
     if (!text.trim()) return;
 
     setLoading(true);
-    setResponse("");
+    setError("");
+    setResponse([]);
 
     try {
       const res = await fetch(`${API_BASE}/api/query`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // This header is okay for now
-          "x-goog-authenticated-user-id": "accounts.google.com:testuser@gmail.com",
-        },
-        body: JSON.stringify({ text }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          user_id: "sumit",
+        }),
       });
 
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+        setError("Backend unreachable");
+        return;
       }
 
       const data = await res.json();
 
-      // FIX 2: handle backend return format: { success: true, result: [...] }
-      const result = data.result;
-
-      if (Array.isArray(result)) {
-        setResponse(result.map((g, i) =>
-          `${i + 1}. ${g.item} 🎁 for ${g.recipient}`
-        ).join("\n"));
-      } else {
-        setResponse(JSON.stringify(result, null, 2));
+      if (!Array.isArray(data.result)) {
+        setError("Unexpected response format");
+        return;
       }
 
+      setResponse(data.result);
       setText("");
     } catch (err) {
-      setResponse("❌ Error: " + err.message);
+      setError("Backend unreachable");
     } finally {
       setLoading(false);
     }
@@ -54,53 +50,47 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-100 via-indigo-50 to-blue-200 p-4">
-      <motion.div
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-2xl bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl border border-gray-100 p-8"
-      >
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-extrabold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-            🎁 Gift List Agent
-          </h1>
-          <p className="text-gray-500 mt-2">Ask or manage your gift list</p>
-        </div>
+      <div className="w-full max-w-2xl bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl border border-gray-100 p-8">
+        <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-6">
+          🎁 Gift List Agent
+        </h1>
 
-        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row items-center gap-3">
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-col sm:flex-row items-center gap-3"
+        >
           <input
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="e.g. 'Add watch for Dad'"
-            className="flex-grow p-4 text-gray-700 border border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 w-full"
+            placeholder="e.g. Add laptop for Sumit"
+            className="flex-grow p-4 border rounded-lg"
           />
           <button
             type="submit"
             disabled={loading}
-            className={`px-6 py-3 rounded-xl text-white font-medium shadow-md transition-all ${
-              loading
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-gradient-to-r from-blue-500 to-indigo-600 hover:scale-105 hover:shadow-lg"
-            }`}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg"
           >
-            {loading ? "⏳" : "Send"}
+            {loading ? "Loading..." : "Send"}
           </button>
         </form>
 
-        <AnimatePresence>
-          {response && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4 }}
-              className="mt-6 bg-gray-50 border border-gray-200 rounded-xl p-5 font-mono text-sm text-gray-800 whitespace-pre-wrap shadow-inner"
-            >
-              {response}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+        {error && (
+          <div className="mt-4 p-4 bg-red-100 border border-red-300 rounded-lg">
+            {error}
+          </div>
+        )}
+
+        {response.length > 0 && !error && (
+          <div className="mt-6 p-4 bg-gray-100 border rounded-lg whitespace-pre-wrap">
+            {response.map((r, i) => (
+              <div key={i}>
+                {i + 1}. {r.item} for {r.person}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

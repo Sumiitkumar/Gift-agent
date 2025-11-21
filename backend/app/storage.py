@@ -1,39 +1,60 @@
-from google.cloud import storage
 import json
-
+from google.cloud import storage
 
 class Storage:
-    def __init__(self, bucket_name: str):
-        """Initialize with Cloud Storage bucket name."""
+    def __init__(self, bucket_name):
         self.client = storage.Client()
         self.bucket = self.client.bucket(bucket_name)
+        self.file = "gift_data.json"   # One file only
 
-    def _path(self, user_id: str) -> str:
-        """Path where each user's JSON file is stored."""
-        return f"{user_id}/list.json"
+    def _blob(self):
+        return self.bucket.blob(self.file)
 
-    def get_list(self, user_id: str):
-        """Retrieve user's list as Python list."""
-        blob = self.bucket.blob(self._path(user_id))
+    def load_all(self):
+        blob = self._blob()
         if not blob.exists():
-            return []
-        try:
-            return json.loads(blob.download_as_text())
-        except Exception:
+            return {}
+
+        return json.loads(blob.download_as_text())
+
+    def save_all(self, data):
+        blob = self._blob()
+        blob.upload_from_string(json.dumps(data, indent=2))
+
+    def add_item(self, person, item):
+        person = person.lower().strip()
+        item = item.lower().strip()
+
+        data = self.load_all()
+        data.setdefault(person, [])
+
+        data[person].append({"item": item, "person": person})
+        self.save_all(data)
+
+        return data[person]
+
+    def remove_item(self, person, item):
+        person = person.lower().strip()
+        item = item.lower().strip()
+
+        data = self.load_all()
+
+        if person not in data:
             return []
 
-    def add_gift(self, user_id: str, item: str, recipient: str):
-        """Add a new gift to the user's list."""
-        lst = self.get_list(user_id)
-        lst.append({"item": item, "recipient": recipient})
-        blob = self.bucket.blob(self._path(user_id))
-        blob.upload_from_string(json.dumps(lst), content_type="application/json")
-        return lst
+        data[person] = [
+            i for i in data[person] if i["item"] != item
+        ]
+        self.save_all(data)
+        return data[person]
 
-    def remove_gift(self, user_id: str, item: str):
-        """Remove a gift item from the user's list."""
-        lst = self.get_list(user_id)
-        updated = [g for g in lst if g.get("item") != item]
-        blob = self.bucket.blob(self._path(user_id))
-        blob.upload_from_string(json.dumps(updated), content_type="application/json")
-        return updated
+    def show_person(self, person):
+        person = person.lower().strip()
+        return self.load_all().get(person, [])
+
+    def show_all(self):
+        final = []
+        data = self.load_all()
+        for person, items in data.items():
+            final.extend(items)
+        return final
