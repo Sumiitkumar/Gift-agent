@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: gift-agent-service
+  name: gift-agent-backend-service
 spec:
   type: LoadBalancer
   selector:
-    app: gift-agent
+    app: gift-agent-backend
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 8080
+      targetPort: 8000

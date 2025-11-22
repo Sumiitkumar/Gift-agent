@@ -7,7 +7,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+  const API_BASE = import.meta.env.VITE_API_URL || "http://34.93.132.123";
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
