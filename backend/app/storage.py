@@ -30,9 +30,10 @@ class Storage:
 
         data[person].append({"item": item, "person": person})
         self.save_all(data)
-
+        
         return data[person]
 
+    # Robust, case-insensitive removal
     def remove_item(self, person, item):
         person = person.lower().strip()
         item = item.lower().strip()
@@ -42,16 +43,47 @@ class Storage:
         if person not in data:
             return []
 
-        data[person] = [
-            i for i in data[person] if i["item"] != item
-        ]
-        self.save_all(data)
-        return data[person]
+        remove_index = -1
+        # CRITICAL FIX: Ensure lookup is case-insensitive
+        for i, entry in enumerate(data[person]):
+            if entry["item"].lower() == item: 
+                remove_index = i
+                break
+        
+        if remove_index != -1:
+            del data[person][remove_index]
+            self.save_all(data)
+            
+        return data.get(person, [])
+
+    # Dedicated atomic edit method
+    def edit_item(self, person, old_item, new_item):
+        person = person.lower().strip()
+        old_item = old_item.lower().strip()
+        new_item = new_item.lower().strip()
+
+        data = self.load_all()
+        if person not in data:
+            return []
+
+        edited = False
+        # CRITICAL FIX: Ensure lookup is case-insensitive
+        for entry in data[person]:
+            if entry["item"].lower() == old_item:
+                entry["item"] = new_item
+                edited = True
+                break
+        
+        if edited:
+            self.save_all(data)
+        
+        return data.get(person, [])
 
     def show_person(self, person):
         person = person.lower().strip()
         return self.load_all().get(person, [])
 
+    # CRITICAL METHOD: Returns the full compiled list
     def show_all(self):
         final = []
         data = self.load_all()

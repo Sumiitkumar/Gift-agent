@@ -1,56 +1,104 @@
-import json
-import vertexai
 from vertexai.generative_models import GenerativeModel
 from app.storage import Storage
 
 class Agent:
     def __init__(self):
-        vertexai.init(project="gift-list-agent", location="us-central1")
-        self.model = GenerativeModel("gemini-2.0-flash")   # FAST + CHEAP
-        self.storage = Storage("gift-list-data")
+        self.model = GenerativeModel("gemini-2.0-flash")
+        self.storage = Storage("gift-agent-bucket-v1")
 
+    # -----------------------------
+    # AI PARSER 
+    # -----------------------------
     def ai_parse(self, text: str):
         prompt = f"""
-        You are a strict JSON parser.
+You are a command parser. Extract ONLY structured JSON.
+User input: "{text}"
 
-        Extract these fields:
-        - action: add | remove | show
-        - item: gift name or null
-        - person: person's name or null
+Rules:
+- Always output JSON in this exact format:
+  {{ "action": "add/remove/edit/show", "item": "", "person": "" }}
+- "edit" means update old item to a new item. Detect both.
+- If user wants to show list, return: {{ "action": "show", "item": "", "person": "" }}
 
-        Always respond ONLY as JSON.
+Examples:
+Input: "Add xbox for sumit"
+Output: {{ "action": "add", "item": "xbox", "person": "sumit" }}
 
-        Example:
-        "add watch for Sumit" → {{"action":"add","item":"watch","person":"sumit"}}
-        "show list for amit" → {{"action":"show","person":"amit"}}
-        "remove bag from rahul" → {{"action":"remove","item":"bag","person":"rahul"}}
+Input: "Remove ps5 for arjun"
+Output: {{ "action": "remove", "item": "ps5", "person": "arjun" }}
 
-        USER MESSAGE: "{text}"
-        """
+Input: "Edit xbox to ps6 for arjun"
+Output: {{ "action": "edit", "item": "xbox|ps6", "person": "arjun" }}
+
+Input: "Show list"
+Output: {{ "action": "show", "item": "", "person": "" }}
+"""
 
         resp = self.model.generate_content(prompt)
-        out = resp.text.strip()
+        raw = resp.text.strip()
 
-        out = out.replace("```json", "").replace("```", "").strip()
-        return json.loads(out)
+        import json
+        try:
+            return json.loads(raw)
+        except:
+            return {"action": "unknown", "item": "", "person": ""}
 
-    async def handle(self, text, user):
+    # -----------------------------
+    # MAIN HANDLER (FIXED LOGIC)
+    # -----------------------------
+    async def handle(self, text: str, user: str):
         parsed = self.ai_parse(text)
+        action = parsed.get("action", "")
+        item = parsed.get("item", "")
+        person = parsed.get("person", "")
 
-        action = parsed.get("action")
-        person = parsed.get("person", user)
-        item = parsed.get("item")
+        # Normalize
+        if item:
+            item = item.lower().strip()
+        if person:
+            person = person.lower().strip()
 
+        # -----------------------------
+        # ADD (FIXED: Now returns show_all)
+        # -----------------------------
         if action == "add":
-            return self.storage.add_item(person, item)
-
-        if action == "remove":
-            return self.storage.remove_item(person, item)
-
-        if action == "show" and person:
-            return self.storage.show_person(person)
-
-        if action == "show":
+            self.storage.add_item(person, item)
+            # FIX: After adding, return the COMPLETE list
             return self.storage.show_all()
 
-        return []
+        # -----------------------------
+        # REMOVE (FIXED: Now returns show_all)
+        # -----------------------------
+        if action == "remove":
+            self.storage.remove_item(person, item)
+            # FIX: After removing, return the COMPLETE list
+            return self.storage.show_all()
+
+        # -----------------------------
+        # EDIT (FIXED: Now returns show_all)
+        # -----------------------------
+        if action == "edit":
+            try:
+                old_item, new_item = item.split("|")
+                old_item = old_item.strip()
+                new_item = new_item.strip()
+            except:
+                return [{"error": "Could not understand edit command"}]
+
+            # 1. Perform the edit
+            self.storage.edit_item(person, old_item, new_item)
+            # 2. Return the COMPLETE list
+            return self.storage.show_all()
+
+        # -----------------------------
+        # SHOW LIST 
+        # -----------------------------
+        if action == "show":
+            if person:
+                # User asked for "Show list for [Person]"
+                return self.storage.show_person(person)
+            else:
+                # User asked for "Show list" or initial load
+                return self.storage.show_all()
+
+        return [{"error": "Unknown command"}]
